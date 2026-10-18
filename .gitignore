@@ -1,0 +1,32 @@
+# Secrets and local configuration
+.env
+.env.*
+*.env
+*.key
+*.pem
+*.p12
+secrets/
+credentials*
+model_config.yaml
+
+# Upstream checkout, environments and run outputs
+upstream/
+.venv/
+venv/
+runs/
+*.log
+usage.jsonl
+cost_summary.json
+*_descriptions.json
+
+# Python and tooling
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

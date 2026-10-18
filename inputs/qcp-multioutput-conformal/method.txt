@@ -1,0 +1,46 @@
+2 Materials and Methods
+
+In this section, we detail the methodological aspects of our study, which bridges quantum circuit data generation with multi-output conformal prediction. Specifically, we describe: (1) the quantum data generation pipeline for single-basis (2-qubit) as well as multi-basis measurements; (2) the classical features extracted from the quantum circuits; (3) our multi-output regression strategy; (4) the distributional conformal approach for interval (or region) construction in up to 12 dimensions.
+
+2.1 Overview of the Pipeline
+The pipeline is divided into four major phases:
+1. Circuit and Measurement Setup: We design a random 2-qubit quantum circuit, optionally measuring it in one or more bases (e.g., {Z, X, Y}).
+2. Data Extraction: We gather classical features (gate counts, depth, etc.) in an X matrix, along with measured distribution vectors (probabilities) in a Y matrix.
+3. Model Training: A multi-output regression model is trained to approximate f: X -> Y.
+4. Conformal Inference: Using a calibration subset, we derive coverage thresholds (radii) for distributional conformal sets in R^4 or R^12. We then test coverage on new circuits.
+
+2.2 Quantum Circuit Generation
+2-Qubit Architecture. We focus on 2-qubit circuits due to their simplicity and ability to demonstrate non-trivial entanglement. Each qubit is initialized to |0>. The circuit depth D (ranging from 1 to 8 in some experiments) dictates the number of gate layers. A depth-1 circuit could apply one or two gates (including possible controlled gates), whereas a depth-8 circuit can have up to 16 or more operations, depending on the random draws.
+Random Gate Selection. We employ a pseudorandom scheme (e.g., Qiskit's random_circuit()) that draws from common gates (H, X, Y, Z, RX, RZ, CX, ...). This ensures a diverse distribution of unitary transformations. At the end of each circuit, we apply a measurement operation:
+- Single-Basis (Z) scenario: We measure in the computational (Z) basis, obtaining probabilities for {|00>, |01>, |10>, |11>}.
+- Multi-Basis scenario: We replicate the circuit or apply basis transformations to measure in X, Y, or Z bases. For instance, measuring in the X basis typically involves a Hadamard on each qubit prior to a Z-basis readout. Similarly, measuring in the Y basis can be done via S^dagger then H.
+Each measurement returns a bitstring from {00, 01, 10, 11} for 2 qubits, repeated over N_shots runs to estimate probabilities.
+
+2.3 Feature Extraction
+Every circuit is analyzed to yield a vector of classical features, x in R^m, capturing:
+- Depth (integer): D in {1, 2, ..., 8}.
+- Total gates: summation of all single- and two-qubit gates used.
+- Gate counts: for each gate type (H, X, Y, Z, CX, ...), we store how many times it appears.
+In our simplest multi-basis experiment, we used m = 2 features: {D, total ops} for brevity. One can easily extend it to m = 17 by enumerating all gate-type frequencies.
+
+2.4 Measurement Vectors
+Single-Basis Setup (4D). Measuring only in the Z-basis yields four probabilities (p_00, p_01, p_10, p_11), which sum to 1. We store them as a 4D vector y in [0,1]^4. In practice, the model may predict a 4D vector that does not sum to 1; we do not impose an explicit simplex constraint in our regressor, but it remains a mild approximation.
+Multi-Basis Setup (12D). When measuring in Z, X, and Y bases, each basis yields four probabilities. We concatenate these results:
+Y_multi = (p^Z_00, p^Z_01, p^Z_10, p^Z_11, p^X_00, p^X_01, p^X_10, p^X_11, p^Y_00, p^Y_01, p^Y_10, p^Y_11).
+Hence, y in R^12. This approach yields a richer "multi-head" measurement vector.
+
+2.5 Multi-Output Regression Model
+To predict y from the classical feature vector x, we use a multi-output random forest regressor by default. Each tree in the ensemble splits on x, and outputs a (4- or 12-)dim leaf average, aggregated across the forest. Our primary interest is not to achieve minimal MSE but to demonstrate how conformal intervals adapt to model accuracy. One may replace random forests with neural networks, gradient boosting, or quantum-hybrid regressors with minimal pipeline changes.
+
+2.6 Distributional Conformal Inference
+Let f(x) be the trained regressor. For a calibration set {(x_i, y_i)}_{i=1}^n, define a residual metric:
+r_i = ||y_i - f(x_i)||_inf  or  r_i = ||y_i - f(x_i)||_2,   (1)
+depending on whether an l_inf or l_2 norm is desired. We sort these r_i in ascending order to get r_(1) <= r_(2) <= ... <= r_(n). For a user-chosen alpha in (0,1), let k = ceil((1 - alpha)(n + 1)). Then tau_alpha = r_(k).
+Given a new test point x_new, the conformal set is
+C_alpha(x_new) = { y in R^d : ||y - f(x_new)|| <= tau_alpha },   (2)
+where d is 4 in single-basis or 12 in the triple-basis scenario. This set is typically a hypercube (for l_inf) or hypersphere (for l_2). By exchangeability arguments, the true y_new should lie in C_alpha(x_new) with probability at least (1 - alpha) in finite samples.
+Coverage and Set Size. We measure coverage on the test set by checking y_j^(test) in C_alpha(x_j^(test)) for each sample j. The fraction of "inside" events approximates the coverage. Meanwhile, the "size" can be measured by volume (e.g., (2 tau_alpha)^d) or sum-size (like d * 2 tau_alpha in l_inf norms). This trade-off between coverage (1 - alpha) and set-size is central to conformal methods.
+Exchangeability in Quantum Data. While quantum hardware might exhibit correlated noise across runs, our synthetic approach typically re-seeds each circuit, so each example x_i is exchangeably drawn from a circuit distribution. If calibration and test sets are similarly drawn, the fundamental assumption for conformal validity holds.
+
+2.7 Implementation
+The data is split into train / calibration / test sets. A multi-output random forest is trained on the train split, residuals are computed on the calibration split, tau is obtained for alpha in {0.05, 0.10, 0.20, 0.30, 0.50}, and empirical coverage is evaluated on the test split.
